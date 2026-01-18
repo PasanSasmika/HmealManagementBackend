@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ES2022",                                  /* Modern Node.js versions support ES2022 features */
+    "module": "NodeNext",                                /* Standard for modern Node.js development */
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],                                   /* Library features available */
+
+    /* Modules */
+    "rootDir": "./src",                                  /* Location of your source files */
+    "outDir": "./dist",                                  /* Where compiled JS will be stored */
+    "baseUrl": ".",                                      /* Base directory to resolve non-relative module names */
+    "paths": {
+      "@/*": ["src/*"]                                   /* Allows for cleaner imports (e.g., import user from '@/models/user') */
+    },
+
+    /* JavaScript Support */
+    "allowJs": true,                                     /* Useful if you gradually migrate files */
+    "checkJs": false,
+
+    /* Emit */
+    "sourceMap": true,                                   /* Helps with debugging back to the TS file */
+    "removeComments": true,                              /* Reduces file size in production */
+    "noEmitOnError": true,                               /* Prevents creating JS files if there are TS errors */
+
+    /* Interop Constraints */
+    "esModuleInterop": true,                             /* Allows importing CommonJS modules as default imports */
+    "forceConsistentCasingInFileNames": true,            /* Important for cross-platform (Windows vs Linux) */
+    "skipLibCheck": true,                                /* Speeds up compilation by skipping declaration files */
+
+    /* Type Checking - Strict Mode for Quality */
+    "strict": true,                                      /* Enable all strict type-checking options */
+    "noImplicitAny": true,                               /* Raise error on expressions and declarations with an implied 'any' type */
+    "strictNullChecks": true,                            /* Ensures you handle null/undefined cases */
+    "noUnusedLocals": true,                              /* Cleanliness: error on unused variables */
+    "noUnusedParameters": true,                          /* Cleanliness: error on unused function parameters */
+    "noImplicitReturns": true,                           /* Ensure all paths in a function return a value */
+    "noFallthroughCasesInSwitch": true                   /* Prevents bugs in switch statements */
+  },
+  "include": ["src/**/*"],                               /* Which files to compile */
+  "exclude": ["node_modules", "**/*.spec.ts", "dist"]    /* Files to ignore */
+}
