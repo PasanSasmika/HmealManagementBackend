@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { protect, authorize } from '../middleware/authMiddleware';
 import { Role } from '../models/User';
-import { bookMeals } from '@/models/mealController';
+import { bookMeals, getTodayMeals } from '@/models/mealController';
 
 const Mealrouter = Router();
 
@@ -11,6 +11,13 @@ Mealrouter.post(
   protect, 
   authorize(Role.EMPLOYEE), 
   bookMeals
+);
+
+Mealrouter.get(
+  '/today', 
+  protect, 
+  authorize(Role.EMPLOYEE), 
+  getTodayMeals
 );
 
 export default Mealrouter;

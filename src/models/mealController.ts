@@ -67,3 +67,39 @@ export const bookMeals = async (req: any, res: Response): Promise<void> => {
   });
 }
 };
+
+export const getTodayMeals = async (req: any, res: Response): Promise<void> => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Get Today's Date normalized to UTC Midnight
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    // 2. Find all bookings for this user for today
+    const bookings = await MealBooking.find({
+      userId,
+      date: today
+    }).select('mealType bookedAt');
+
+    if (bookings.length === 0) {
+      res.status(200).json({
+        success: true,
+        hasBookings: false,
+        message: "You haven't booked any meals for today.",
+        data: []
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      hasBookings: true,
+      message: "Today's bookings retrieved.",
+      data: bookings // Returns array: e.g., [{mealType: 'breakfast'}, {mealType: 'lunch'}]
+    });
+
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
