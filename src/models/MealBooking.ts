@@ -11,6 +11,8 @@ export interface IMealBooking extends Document {
   date: Date; // Stored as YYYY-MM-DDT00:00:00.000Z
   mealType: MealType;
   bookedAt: Date;
+  status: 'booked' | 'requested' | 'served' | 'rejected';
+otp?: string;
 }
 
 const mealBookingSchema = new Schema<IMealBooking>({
@@ -21,7 +23,13 @@ const mealBookingSchema = new Schema<IMealBooking>({
     enum: Object.values(MealType), 
     required: true 
   },
-  bookedAt: { type: Date, default: Date.now }
+  bookedAt: { type: Date, default: Date.now },
+  status: { 
+  type: String, 
+  enum: ['booked', 'requested', 'served', 'rejected'], 
+  default: 'booked' 
+},
+otp: { type: String }
 }, { timestamps: true });
 
 // Prevent duplicate bookings for same user/date/meal

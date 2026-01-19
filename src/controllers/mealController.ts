@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import MealBooking, { MealType } from '../models/MealBooking';
 import { mealBookingSchema } from '../validations/mealValidation';
+import User from '@/models/User';
 
 export const bookMeals = async (req: any, res: Response): Promise<void> => {
   try {
@@ -101,5 +102,87 @@ export const getTodayMeals = async (req: any, res: Response): Promise<void> => {
 
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const requestMeal = async (req: any, res: Response, io: any): Promise<void> => {
+  try {
+    const { mealType } = req.body; // e.g., 'breakfast'
+    const userId = req.user.id;
+    const now = new Date();
+    const currentHour = now.getHours();
+
+    // 1. Time Window Validation
+    const windows: any = {
+      breakfast: { start: 7, end: 11 },
+      lunch: { start: 12, end: 16 },
+      dinner: { start: 18, end: 22 }
+    };
+
+    const window = windows[mealType];
+    if (currentHour < window.start || currentHour >= window.end) {
+      res.status(400).json({ message: `It is not ${mealType} time yet.` });
+      return;
+    }
+
+    // 2. Check if booking exists for today
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const booking = await MealBooking.findOne({ userId, date: today, mealType });
+
+    if (!booking) {
+      res.status(404).json({ message: "No booking found for this meal today." });
+      return;
+    }
+
+    // 3. Update status to requested
+    booking.status = 'requested';
+    await booking.save();
+
+    // 4. Notify Canteen via Socket
+    const user = await User.findById(userId);
+    io.to('canteen_room').emit('new_meal_request', {
+      bookingId: booking._id,
+      employeeName: `${user?.firstName} ${user?.lastName}`,
+      mealType: mealType
+    });
+
+    res.status(200).json({ success: true, message: "Request sent to canteen." });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const respondToRequest = async (req: any, res: Response, io: any): Promise<void> => {
+  try {
+    const { bookingId, action } = req.body; // action: 'accept' or 'reject'
+
+    const booking = await MealBooking.findById(bookingId);
+    if (!booking) {
+      res.status(404).json({ message: "Request not found." });
+      return;
+    }
+
+    if (action === 'accept') {
+      // Generate a simple 4-digit OTP
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+      booking.otp = otp;
+      booking.status = 'served'; // Mark as served once OTP is generated
+      await booking.save();
+
+      // Send OTP to specific Employee via their unique Socket ID or Room
+      io.to(booking.userId.toString()).emit('meal_accepted', { otp });
+      
+      res.status(200).json({ success: true, otp });
+    } else {
+      booking.status = 'rejected';
+      await booking.save();
+      io.to(booking.userId.toString()).emit('meal_rejected', { message: "Request denied by canteen." });
+      res.status(200).json({ success: true, message: "Request rejected." });
+    }
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
   }
 };
