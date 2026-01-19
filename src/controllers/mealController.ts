@@ -231,3 +231,120 @@ export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const processPayment = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { bookingId, paymentType, amountPaid } = req.body;
+    const MEAL_PRICE = 150; // Set your base meal price here
+
+    const booking = await MealBooking.findById(bookingId).populate('userId');
+    if (!booking) {
+      res.status(404).json({ message: "Booking not found" });
+      return;
+    }
+
+    const user: any = booking.userId;
+    let finalAmountPaid = 0;
+    let balance = 0;
+
+    // --- Business Logic based on SubRole ---
+    if (user.subRole === 'intern') {
+      booking.paymentType = 'free';
+      booking.totalPrice = 0;
+    } 
+    else if (user.subRole === 'permanent') {
+      booking.paymentType = 'pay_now'; // Only Pay Now allowed
+      booking.totalPrice = MEAL_PRICE;
+      finalAmountPaid = MEAL_PRICE;
+    } 
+    else if (user.subRole === 'casual' || user.subRole === 'manpower') {
+      booking.paymentType = paymentType; // Can be pay_now or pay_later
+      booking.totalPrice = MEAL_PRICE;
+      
+      if (paymentType === 'pay_later') {
+        finalAmountPaid = amountPaid || 0;
+        balance = MEAL_PRICE - finalAmountPaid;
+      } else {
+        finalAmountPaid = MEAL_PRICE;
+      }
+    }
+
+    booking.amountPaid = finalAmountPaid;
+    booking.balance = balance;
+    booking.status = 'served'; // Final status
+    
+    await booking.save();
+
+    res.status(200).json({ 
+      success: true, 
+      message: "Payment processed. Canteen can now issue the meal.",
+      details: {
+        total: booking.totalPrice,
+        paid: booking.amountPaid,
+        balance: booking.balance
+      }
+    });
+
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const getPaymentStatus = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+
+    const booking = await MealBooking.findById(bookingId)
+      .populate('userId', 'firstName lastName subRole mobileNumber');
+
+    if (!booking) {
+      res.status(404).json({ success: false, message: "Booking not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        employeeName: `${(booking.userId as any).firstName} ${(booking.userId as any).lastName}`,
+        subRole: (booking.userId as any).subRole,
+        paymentType: booking.paymentType, // 'pay_now', 'pay_later', 'free'
+        totalPrice: booking.totalPrice,
+        amountPaid: booking.amountPaid,
+        balance: booking.balance,
+        status: booking.status
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const issueMeal = async (req: any, res: Response, io: any): Promise<void> => {
+  try {
+    const { bookingId } = req.body;
+
+    const booking = await MealBooking.findById(bookingId);
+    if (!booking) {
+      res.status(404).json({ message: "Booking not found" });
+      return;
+    }
+
+    // Final check: Ensure it's not already issued
+    if (booking.status === 'served' && booking.verifiedAt) {
+      // Logic: If already verified but now we are issuing it
+      booking.status = 'served'; // Already served status, but we can add a 'completed' flag
+    }
+
+    await booking.save();
+
+    // Notify the employee's phone that the process is complete
+    io.to(booking.userId.toString()).emit('meal_issued', { 
+      message: "Your meal has been issued. Enjoy!" 
+    });
+
+    res.status(200).json({ success: true, message: "Meal issued successfully." });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};

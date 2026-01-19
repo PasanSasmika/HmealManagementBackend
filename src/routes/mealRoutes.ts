@@ -3,7 +3,10 @@ import { protect, authorize } from '../middleware/authMiddleware';
 import { Role } from '../models/User';
 import { 
   bookMeals, 
+  getPaymentStatus, 
   getTodayMeals, 
+  issueMeal, 
+  processPayment, 
   requestMeal, 
   respondToRequest, 
   verifyMealOTP
@@ -55,7 +58,36 @@ const MealRouter = (io: any) => {
     authorize(Role.EMPLOYEE),
     verifyMealOTP // No 'io' needed here unless you want to alert the canteen dashboard
   );
+
+    MealRouter.post(
+    '/process-payment',
+    protect,
+    authorize(Role.EMPLOYEE, Role.CANTEEN), // Both can trigger this depending on your flow
+    processPayment
+  );
+
+  MealRouter.get(
+    '/payment-status/:bookingId',
+    protect,
+    authorize(Role.CANTEEN, Role.ADMIN),
+    getPaymentStatus
+  );
+
+  // Canteen: Final button click to issue the meal
+  MealRouter.post(
+    '/issue',
+    protect,
+    authorize(Role.CANTEEN),
+    (req, res) => issueMeal(req, res, io)
+  );
+
+
+
   return MealRouter;
+
+
 };
+
+
 
 export default MealRouter;

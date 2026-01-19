@@ -12,8 +12,12 @@ export interface IMealBooking extends Document {
   mealType: MealType;
   bookedAt: Date;
   status: 'booked' | 'requested' | 'served' | 'rejected';
-otp?: string;
-verifiedAt?: Date;
+  otp?: string;
+  verifiedAt?: Date;
+  paymentType?: 'pay_now' | 'pay_later' | 'free';
+  totalPrice?: number;
+  amountPaid?: number;
+  balance?: number;
 }
 
 const mealBookingSchema = new Schema<IMealBooking>({
@@ -31,7 +35,12 @@ const mealBookingSchema = new Schema<IMealBooking>({
   default: 'booked' 
 },
    otp: { type: String },
-   verifiedAt: { type: Date }
+   verifiedAt: { type: Date },
+
+   paymentType: { type: String, enum: ['pay_now', 'pay_later', 'free'] },
+totalPrice: { type: Number, default: 0 },
+amountPaid: { type: Number, default: 0 },
+balance: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Prevent duplicate bookings for same user/date/meal
