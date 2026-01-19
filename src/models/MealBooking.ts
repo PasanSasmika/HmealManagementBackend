@@ -13,6 +13,7 @@ export interface IMealBooking extends Document {
   bookedAt: Date;
   status: 'booked' | 'requested' | 'served' | 'rejected';
 otp?: string;
+verifiedAt?: Date;
 }
 
 const mealBookingSchema = new Schema<IMealBooking>({
@@ -29,7 +30,8 @@ const mealBookingSchema = new Schema<IMealBooking>({
   enum: ['booked', 'requested', 'served', 'rejected'], 
   default: 'booked' 
 },
-otp: { type: String }
+   otp: { type: String },
+   verifiedAt: { type: Date }
 }, { timestamps: true });
 
 // Prevent duplicate bookings for same user/date/meal

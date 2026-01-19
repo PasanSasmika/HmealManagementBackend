@@ -5,7 +5,8 @@ import {
   bookMeals, 
   getTodayMeals, 
   requestMeal, 
-  respondToRequest 
+  respondToRequest, 
+  verifyMealOTP
 } from '@/controllers/mealController';
 
 /**
@@ -47,6 +48,13 @@ const MealRouter = (io: any) => {
     (req, res) => respondToRequest(req, res, io)
   );
 
+// 5. Employee verifies the OTP shown on their screen
+  MealRouter.post(
+    '/verify-otp',
+    protect,
+    authorize(Role.EMPLOYEE),
+    verifyMealOTP // No 'io' needed here unless you want to alert the canteen dashboard
+  );
   return MealRouter;
 };
 

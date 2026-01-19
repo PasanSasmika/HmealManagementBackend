@@ -186,3 +186,48 @@ export const respondToRequest = async (req: any, res: Response, io: any): Promis
     res.status(500).json({ message: error.message });
   }
 };
+
+
+export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { bookingId, otp } = req.body;
+    const userId = req.user.id;
+
+    // 1. Find the booking and ensure it belongs to the logged-in user
+    const booking = await MealBooking.findOne({ _id: bookingId, userId });
+
+    if (!booking) {
+       res.status(404).json({ success: false, message: "Booking not found." });
+       return;
+    }
+
+    // 2. Check if it was already verified
+    if (booking.status === 'served' && booking.verifiedAt) {
+       res.status(400).json({ success: false, message: "This meal has already been collected." });
+       return;
+    }
+
+    // 3. Verify OTP
+    if (booking.otp !== otp) {
+       res.status(401).json({ success: false, message: "Invalid OTP. Please try again." });
+       return;
+    }
+
+    // 4. Update status to served and record the time
+    booking.status = 'served';
+    booking.verifiedAt = new Date();
+    // Clear OTP after use for security
+    booking.otp = undefined; 
+    
+    await booking.save();
+
+    res.status(200).json({ 
+      success: true, 
+      message: "OTP Verified! You may now proceed to payment selection.",
+      navigateTo: "PaymentSelection" // Hint for your React Native navigation
+    });
+
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
