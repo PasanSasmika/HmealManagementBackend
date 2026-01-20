@@ -11,6 +11,7 @@ import {
   respondToRequest, 
   verifyMealOTP
 } from '@/controllers/mealController';
+import { getMealPrices, updateMealPrices } from '@/controllers/mealPriceController';
 
 /**
  * We export a function that accepts the Socket.io instance.
@@ -79,6 +80,20 @@ const MealRouter = (io: any) => {
     protect,
     authorize(Role.CANTEEN),
     (req, res) => issueMeal(req, res, io)
+  );
+
+  MealRouter.get(
+    '/prices',
+    protect,
+    getMealPrices
+  );
+
+  // 2. Set Prices (Restricted to Admin & HR Manager)
+  MealRouter.post(
+    '/prices',
+    protect,
+    authorize(Role.ADMIN, Role.HRMANAGER),
+    updateMealPrices
   );
 
 
