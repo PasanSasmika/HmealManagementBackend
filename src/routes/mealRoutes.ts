@@ -61,11 +61,11 @@ const MealRouter = (io: any) => {
   );
 
     MealRouter.post(
-    '/process-payment',
-    protect,
-    authorize(Role.EMPLOYEE, Role.CANTEEN), // Both can trigger this depending on your flow
-    processPayment
-  );
+  '/process-payment',
+  protect,
+  authorize(Role.EMPLOYEE, Role.CANTEEN),
+  (req, res) => processPayment(req, res, io) // ✅ Pass io here
+);
 
   MealRouter.get(
     '/payment-status/:bookingId',

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import MealBooking, { MealType } from '../models/MealBooking';
 import { mealBookingSchema } from '../validations/mealValidation';
 import User from '@/models/User';
+import MealPrice from '@/models/MealPrice';
 
 export const bookMeals = async (req: any, res: Response): Promise<void> => {
   try {
@@ -232,10 +233,9 @@ export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
   }
 };
 
-export const processPayment = async (req: any, res: Response): Promise<void> => {
+export const processPayment = async (req: any, res: Response, io: any): Promise<void> => {
   try {
     const { bookingId, paymentType, amountPaid } = req.body;
-    const MEAL_PRICE = 150; // Set your base meal price here
 
     const booking = await MealBooking.findById(bookingId).populate('userId');
     if (!booking) {
@@ -243,41 +243,63 @@ export const processPayment = async (req: any, res: Response): Promise<void> => 
       return;
     }
 
+    // 1. FETCH DYNAMIC PRICES
+    const priceDoc = await MealPrice.findOne();
+    let currentMealPrice = 0;
+
+    // Default to 0 if no price set, otherwise match the meal type
+    if (priceDoc) {
+      if (booking.mealType === 'breakfast') currentMealPrice = priceDoc.breakfast;
+      else if (booking.mealType === 'lunch') currentMealPrice = priceDoc.lunch;
+      else if (booking.mealType === 'dinner') currentMealPrice = priceDoc.dinner;
+    }
+
     const user: any = booking.userId;
     let finalAmountPaid = 0;
     let balance = 0;
 
-    // --- Business Logic based on SubRole ---
+    // 2. Business Logic (Interns Free vs Employees Pay Dynamic Price)
     if (user.subRole === 'intern') {
       booking.paymentType = 'free';
       booking.totalPrice = 0;
     } 
     else if (user.subRole === 'permanent') {
-      booking.paymentType = 'pay_now'; // Only Pay Now allowed
-      booking.totalPrice = MEAL_PRICE;
-      finalAmountPaid = MEAL_PRICE;
+      booking.paymentType = 'pay_now';
+      booking.totalPrice = currentMealPrice; // Use Dynamic Price
+      finalAmountPaid = currentMealPrice;
     } 
     else if (user.subRole === 'casual' || user.subRole === 'manpower') {
-      booking.paymentType = paymentType; // Can be pay_now or pay_later
-      booking.totalPrice = MEAL_PRICE;
+      booking.paymentType = paymentType;
+      booking.totalPrice = currentMealPrice; // Use Dynamic Price
       
       if (paymentType === 'pay_later') {
         finalAmountPaid = amountPaid || 0;
-        balance = MEAL_PRICE - finalAmountPaid;
+        balance = currentMealPrice - finalAmountPaid;
       } else {
-        finalAmountPaid = MEAL_PRICE;
+        finalAmountPaid = currentMealPrice;
       }
     }
 
     booking.amountPaid = finalAmountPaid;
     booking.balance = balance;
-    booking.status = 'served'; // Final status
+    booking.status = 'served';
     
     await booking.save();
 
+    // 3. Notify Canteen with CORRECT Price
+    io.to('canteen_room').emit('payment_confirmed', {
+      bookingId: booking._id,
+      employeeName: `${user.firstName} ${user.lastName}`,
+      mealType: booking.mealType,
+      paymentType: booking.paymentType,
+      totalPrice: booking.totalPrice, // Now sends the correct price
+      amountPaid: booking.amountPaid,
+      balance: booking.balance
+    });
+
     res.status(200).json({ 
       success: true, 
-      message: "Payment processed. Canteen can now issue the meal.",
+      message: "Payment processed.",
       details: {
         total: booking.totalPrice,
         paid: booking.amountPaid,
