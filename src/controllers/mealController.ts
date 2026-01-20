@@ -82,7 +82,7 @@ export const getTodayMeals = async (req: any, res: Response): Promise<void> => {
     const bookings = await MealBooking.find({
       userId,
       date: today
-    }).select('mealType bookedAt');
+    }).select('mealType bookedAt status');
 
     if (bookings.length === 0) {
       res.status(200).json({
