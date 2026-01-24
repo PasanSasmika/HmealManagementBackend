@@ -106,12 +106,18 @@ export const getTodayMeals = async (req: any, res: Response): Promise<void> => {
 
 export const requestMeal = async (req: any, res: Response, io: any): Promise<void> => {
   try {
-    const { mealType } = req.body; // e.g., 'breakfast'
+    const { mealType } = req.body; 
     const userId = req.user.id;
-    const now = new Date();
-    const currentHour = now.getHours();
 
-    // 1. Time Window Validation
+    // 1. FIX: Get Current Time in Sri Lanka (Asia/Colombo)
+    // Render uses UTC, so we must convert it.
+    const serverTime = new Date();
+    const lkTimeStr = serverTime.toLocaleString("en-US", { timeZone: "Asia/Colombo" });
+    const lkNow = new Date(lkTimeStr);
+    
+    const currentHour = lkNow.getHours(); // This will now give 10 (if it's 10 AM in SL)
+
+    // 2. Time Window Validation
     const windows: any = {
       breakfast: { start: 7, end: 11 },
       lunch: { start: 12, end: 17 },
@@ -120,13 +126,13 @@ export const requestMeal = async (req: any, res: Response, io: any): Promise<voi
 
     const window = windows[mealType];
     if (currentHour < window.start || currentHour >= window.end) {
-      res.status(400).json({ message: `It is not ${mealType} time yet.` });
+      res.status(400).json({ message: `It is not ${mealType} time yet. (Hour: ${currentHour})` });
       return;
     }
 
-    // 2. Check if booking exists for today
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    // 3. FIX: Get "Today" based on Sri Lanka date, normalized to UTC Midnight for DB
+    // (We match how we stored it in bookMeals)
+    const today = new Date(Date.UTC(lkNow.getFullYear(), lkNow.getMonth(), lkNow.getDate()));
 
     const booking = await MealBooking.findOne({ userId, date: today, mealType });
 
@@ -135,11 +141,11 @@ export const requestMeal = async (req: any, res: Response, io: any): Promise<voi
       return;
     }
 
-    // 3. Update status to requested
+    // 4. Update status to requested
     booking.status = 'requested';
     await booking.save();
 
-    // 4. Notify Canteen via Socket
+    // 5. Notify Canteen via Socket
     const user = await User.findById(userId);
     io.to('canteen_room').emit('new_meal_request', {
       bookingId: booking._id,
