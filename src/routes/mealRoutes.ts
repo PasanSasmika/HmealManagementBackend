@@ -7,6 +7,7 @@ import {
   getTodayMeals, 
   issueMeal, 
   processPayment, 
+  rejectIssue, 
   requestMeal, 
   respondToRequest, 
   verifyMealOTP
@@ -96,7 +97,12 @@ const MealRouter = (io: any) => {
     updateMealPrices
   );
 
-
+MealRouter.post(
+  '/reject-issue',
+  protect,
+  authorize(Role.CANTEEN),
+  (req, res) => rejectIssue(req, res, io)
+);
 
   return MealRouter;
 

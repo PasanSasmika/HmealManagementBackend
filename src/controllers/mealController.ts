@@ -73,16 +73,14 @@ export const bookMeals = async (req: any, res: Response): Promise<void> => {
 export const getTodayMeals = async (req: any, res: Response): Promise<void> => {
   try {
     const userId = req.user.id;
-
-    // 1. Get Today's Date normalized to UTC Midnight
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
-    // 2. Find all bookings for this user for today
+    // ✅ Select extra fields: status, verifiedAt, paymentType, otp
     const bookings = await MealBooking.find({
       userId,
       date: today
-    }).select('mealType bookedAt status');
+    }).select('mealType bookedAt status verifiedAt paymentType otp');
 
     if (bookings.length === 0) {
       res.status(200).json({
@@ -98,7 +96,7 @@ export const getTodayMeals = async (req: any, res: Response): Promise<void> => {
       success: true,
       hasBookings: true,
       message: "Today's bookings retrieved.",
-      data: bookings // Returns array: e.g., [{mealType: 'breakfast'}, {mealType: 'lunch'}]
+      data: bookings
     });
 
   } catch (error: any) {
@@ -158,24 +156,22 @@ export const requestMeal = async (req: any, res: Response, io: any): Promise<voi
 
 export const respondToRequest = async (req: any, res: Response, io: any): Promise<void> => {
   try {
-    const { bookingId, action } = req.body; // action: 'accept' or 'reject'
-
+    const { bookingId, action } = req.body; 
     const booking = await MealBooking.findById(bookingId);
+    
     if (!booking) {
       res.status(404).json({ message: "Request not found." });
       return;
     }
 
     if (action === 'accept') {
-      // Generate a simple 4-digit OTP
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
       booking.otp = otp;
-      booking.status = 'served'; // Mark as served once OTP is generated
+      // ❌ REMOVED: booking.status = 'served'; 
+      // Status remains 'requested' until Issue Meal step
       await booking.save();
 
-      // Send OTP to specific Employee via their unique Socket ID or Room
       io.to(booking.userId.toString()).emit('meal_accepted', { otp });
-      
       res.status(200).json({ success: true, otp });
     } else {
       booking.status = 'rejected';
@@ -194,7 +190,6 @@ export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
     const { bookingId, otp } = req.body;
     const userId = req.user.id;
 
-    // 1. Find the booking and ensure it belongs to the logged-in user
     const booking = await MealBooking.findOne({ _id: bookingId, userId });
 
     if (!booking) {
@@ -202,22 +197,19 @@ export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
        return;
     }
 
-    // 2. Check if it was already verified
-    if (booking.status === 'served' && booking.verifiedAt) {
+    // Check if already collected (fully served)
+    if (booking.status === 'served') { 
        res.status(400).json({ success: false, message: "This meal has already been collected." });
        return;
     }
 
-    // 3. Verify OTP
     if (booking.otp !== otp) {
        res.status(401).json({ success: false, message: "Invalid OTP. Please try again." });
        return;
     }
 
-    // 4. Update status to served and record the time
-    booking.status = 'served';
+    // ❌ REMOVED: booking.status = 'served';
     booking.verifiedAt = new Date();
-    // Clear OTP after use for security
     booking.otp = undefined; 
     
     await booking.save();
@@ -225,7 +217,7 @@ export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
     res.status(200).json({ 
       success: true, 
       message: "OTP Verified! You may now proceed to payment selection.",
-      navigateTo: "PaymentSelection" // Hint for your React Native navigation
+      navigateTo: "PaymentSelection"
     });
 
   } catch (error: any) {
@@ -247,7 +239,6 @@ export const processPayment = async (req: any, res: Response, io: any): Promise<
     const priceDoc = await MealPrice.findOne();
     let currentMealPrice = 0;
 
-    // Default to 0 if no price set, otherwise match the meal type
     if (priceDoc) {
       if (booking.mealType === 'breakfast') currentMealPrice = priceDoc.breakfast;
       else if (booking.mealType === 'lunch') currentMealPrice = priceDoc.lunch;
@@ -258,19 +249,19 @@ export const processPayment = async (req: any, res: Response, io: any): Promise<
     let finalAmountPaid = 0;
     let balance = 0;
 
-    // 2. Business Logic (Interns Free vs Employees Pay Dynamic Price)
+    // 2. Business Logic
     if (user.subRole === 'intern') {
       booking.paymentType = 'free';
       booking.totalPrice = 0;
     } 
     else if (user.subRole === 'permanent') {
       booking.paymentType = 'pay_now';
-      booking.totalPrice = currentMealPrice; // Use Dynamic Price
+      booking.totalPrice = currentMealPrice; 
       finalAmountPaid = currentMealPrice;
     } 
     else if (user.subRole === 'casual' || user.subRole === 'manpower') {
       booking.paymentType = paymentType;
-      booking.totalPrice = currentMealPrice; // Use Dynamic Price
+      booking.totalPrice = currentMealPrice; 
       
       if (paymentType === 'pay_later') {
         finalAmountPaid = amountPaid || 0;
@@ -282,24 +273,24 @@ export const processPayment = async (req: any, res: Response, io: any): Promise<
 
     booking.amountPaid = finalAmountPaid;
     booking.balance = balance;
-    booking.status = 'served';
+    // ❌ REMOVED: booking.status = 'served'; (Wait for Canteen Issue)
     
     await booking.save();
 
-    // 3. Notify Canteen with CORRECT Price
+    // 3. Notify Canteen
     io.to('canteen_room').emit('payment_confirmed', {
       bookingId: booking._id,
       employeeName: `${user.firstName} ${user.lastName}`,
       mealType: booking.mealType,
       paymentType: booking.paymentType,
-      totalPrice: booking.totalPrice, // Now sends the correct price
+      totalPrice: booking.totalPrice,
       amountPaid: booking.amountPaid,
       balance: booking.balance
     });
 
     res.status(200).json({ 
       success: true, 
-      message: "Payment processed.",
+      message: "Payment processed. Waiting for canteen to issue meal.",
       details: {
         total: booking.totalPrice,
         paid: booking.amountPaid,
@@ -352,15 +343,12 @@ export const issueMeal = async (req: any, res: Response, io: any): Promise<void>
       return;
     }
 
-    // Final check: Ensure it's not already issued
-    if (booking.status === 'served' && booking.verifiedAt) {
-      // Logic: If already verified but now we are issuing it
-      booking.status = 'served'; // Already served status, but we can add a 'completed' flag
-    }
-
+    // ✅ THIS IS WHERE WE MARK IT COMPLETE
+    booking.status = 'served'; 
+    
     await booking.save();
 
-    // Notify the employee's phone that the process is complete
+    // Notify employee
     io.to(booking.userId.toString()).emit('meal_issued', { 
       message: "Your meal has been issued. Enjoy!" 
     });
@@ -370,3 +358,35 @@ export const issueMeal = async (req: any, res: Response, io: any): Promise<void>
     res.status(500).json({ message: error.message });
   }
 };
+
+export const rejectIssue = async (req: any, res: Response, io: any): Promise<void> => {
+  try {
+    const { bookingId } = req.body;
+    const booking = await MealBooking.findById(bookingId);
+    
+    if (!booking) {
+      res.status(404).json({ message: "Booking not found" });
+      return;
+    }
+
+    // Reset fields to allow re-requesting
+    booking.status = 'booked';
+    booking.otp = undefined;
+    booking.verifiedAt = undefined;
+    booking.paymentType = undefined;
+    booking.totalPrice = 0;
+    booking.amountPaid = 0;
+    booking.balance = 0;
+
+    await booking.save();
+
+    // Notify employee that issue was rejected (Reset UI)
+    io.to(booking.userId.toString()).emit('meal_issue_rejected', { 
+      message: "Meal issue rejected by canteen. You can request again." 
+    });
+
+    res.status(200).json({ success: true, message: "Meal issue rejected. Reset to booked." });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+}
