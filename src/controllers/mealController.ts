@@ -396,3 +396,28 @@ export const rejectIssue = async (req: any, res: Response, io: any): Promise<voi
     res.status(500).json({ message: error.message });
   }
 }
+
+export const getUpcomingBookings = async (req: any, res: Response): Promise<void> => {
+  try {
+    const userId = req.user.id;
+    
+    // Get range: Today to Today + 7 days
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    
+    const nextWeek = new Date(today);
+    nextWeek.setUTCDate(today.getUTCDate() + 7);
+
+    const bookings = await MealBooking.find({
+      userId,
+      date: { $gte: today, $lte: nextWeek }
+    }).select('date mealType status');
+
+    res.status(200).json({ 
+      success: true, 
+      data: bookings 
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

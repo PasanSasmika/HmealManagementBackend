@@ -5,6 +5,7 @@ import {
   bookMeals, 
   getPaymentStatus, 
   getTodayMeals, 
+  getUpcomingBookings, 
   issueMeal, 
   processPayment, 
   rejectIssue, 
@@ -103,6 +104,13 @@ MealRouter.post(
   authorize(Role.CANTEEN),
   (req, res) => rejectIssue(req, res, io)
 );
+
+MealRouter.get(
+    '/upcoming', 
+    protect, 
+    authorize(Role.EMPLOYEE), 
+    getUpcomingBookings
+  );
 
   return MealRouter;
 
