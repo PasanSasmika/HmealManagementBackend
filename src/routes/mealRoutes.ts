@@ -3,6 +3,7 @@ import { protect, authorize } from '../middleware/authMiddleware';
 import { Role } from '../models/User';
 import { 
   bookMeals, 
+  cancelMeal, 
   getPaymentStatus, 
   getTodayMeals, 
   getUpcomingBookings, 
@@ -110,6 +111,13 @@ MealRouter.get(
     protect, 
     authorize(Role.EMPLOYEE), 
     getUpcomingBookings
+  );
+
+  MealRouter.post(
+    '/cancel',
+    protect,
+    authorize(Role.EMPLOYEE),
+    cancelMeal
   );
 
   return MealRouter;

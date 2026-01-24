@@ -421,3 +421,63 @@ export const getUpcomingBookings = async (req: any, res: Response): Promise<void
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const cancelMeal = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.body;
+    const userId = req.user.id;
+
+    const booking = await MealBooking.findOne({ _id: bookingId, userId });
+
+    if (!booking) {
+      res.status(404).json({ message: "Booking not found" });
+      return;
+    }
+
+    // --- TIME VALIDATION LOGIC ---
+    // Rule: Cancel allowed only before "Previous Day" at specific times.
+    
+    // 1. Get the Meal Date
+    const mealDate = new Date(booking.date);
+    
+    // 2. Set Base Deadline: Previous Day (Day - 1)
+    const deadline = new Date(mealDate);
+    deadline.setUTCDate(mealDate.getUTCDate() - 1); 
+
+    // 3. Set Specific Deadline Time based on Meal Type (UTC Conversion)
+    // SL Time is UTC + 5:30
+    if (booking.mealType === 'breakfast') {
+      // 10:00 AM SL = 04:30 AM UTC
+      deadline.setUTCHours(4, 30, 0, 0); 
+    } 
+    else if (booking.mealType === 'lunch') {
+      // 02:00 PM SL (14:00) = 08:30 AM UTC
+      deadline.setUTCHours(8, 30, 0, 0);
+    } 
+    else if (booking.mealType === 'dinner') {
+      // 06:00 PM SL (18:00) = 12:30 PM UTC
+      deadline.setUTCHours(12, 30, 0, 0);
+    }
+
+    // 4. Compare with Current Server Time (UTC)
+    const now = new Date();
+
+    if (now > deadline) {
+      res.status(400).json({ 
+        message: `Cancellation Failed. ${booking.mealType} must be cancelled before the previous day's cutoff.` 
+      });
+      return;
+    }
+
+    // --- PROCEED TO CANCEL ---
+    await MealBooking.deleteOne({ _id: bookingId });
+
+    res.status(200).json({ 
+      success: true, 
+      message: "Meal cancelled successfully." 
+    });
+
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
