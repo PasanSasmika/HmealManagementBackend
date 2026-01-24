@@ -15,6 +15,7 @@ import {
   verifyMealOTP
 } from '@/controllers/mealController';
 import { getMealPrices, updateMealPrices } from '@/controllers/mealPriceController';
+import { getWalletStats } from '@/controllers/walletController';
 
 /**
  * We export a function that accepts the Socket.io instance.
@@ -118,6 +119,13 @@ MealRouter.get(
     protect,
     authorize(Role.EMPLOYEE),
     cancelMeal
+  );
+
+  MealRouter.get(
+    '/wallet',
+    protect,
+    authorize(Role.EMPLOYEE),
+    getWalletStats
   );
 
   return MealRouter;
