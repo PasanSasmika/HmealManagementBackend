@@ -111,3 +111,68 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ message: 'Server error during import', error: error.message });
   }
 };
+
+
+export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Exclude password and version key
+    const users = await User.find().select('-password -__v').sort({ createdAt: -1 });
+    res.json({ success: true, data: users });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ NEW: Update User Details
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    // Prevent password updates via this route for security
+    delete updateData.password; 
+    delete updateData.username; // Usually username is immutable, optional
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.json({ success: true, message: "User updated successfully", data: updatedUser });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    // Fix: Cast req to 'any' to access the user object attached by middleware
+    const requestingUserId = (req as any).user.id;
+
+    // Prevent deleting yourself
+    if (requestingUserId === id) {
+      res.status(400).json({ message: "You cannot delete your own account." });
+      return;
+    }
+
+    const deletedUser = await User.findByIdAndDelete(id);
+
+    if (!deletedUser) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    res.json({ success: true, message: "User deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, registerBulk } from '../controllers/authController';
+import { register, login, registerBulk, getAllUsers, updateUser, deleteUser } from '../controllers/authController';
 import { authorize, protect } from '@/middleware/authMiddleware';
 import { Role } from '@/models/User';
 import multer from 'multer';
@@ -13,4 +13,7 @@ router.post('/register', protect, authorize(Role.ADMIN, Role.HRMANAGER), registe
 
 router.post('/register-bulk',protect, authorize(Role.ADMIN, Role.HRMANAGER),upload.single('file'), registerBulk);
 
+router.get('/', protect, authorize(Role.ADMIN, Role.HRMANAGER), getAllUsers);
+router.put('/:id', protect, authorize(Role.ADMIN, Role.HRMANAGER), updateUser);
+router.delete('/:id', protect, authorize(Role.ADMIN, Role.HRMANAGER), deleteUser);
 export default router;
