@@ -23,9 +23,9 @@ export const bookMeals = async (req: any, res: Response): Promise<void> => {
       bookingDate.setUTCHours(0, 0, 0, 0); // Force midnight UTC for consistency
 
       // 4. Strict Date Validation
-      if (bookingDate < today || bookingDate > maxDate) {
-        throw new Error(`Date ${b.date.split('T')[0]} is out of the allowed 7-day range.`);
-      }
+      // if (bookingDate < today || bookingDate > maxDate) {
+      //   throw new Error(`Date ${b.date.split('T')[0]} is out of the allowed 7-day range.`);
+      // } /////////////////////////////////////////////////////////////////////////////////////////////// Uncomment last
 
       return {
         updateOne: {
