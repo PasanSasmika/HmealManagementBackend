@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { protect, authorize } from '../middleware/authMiddleware';
 import { Role } from '../models/User';
 import { 
+  adminBookMeal,
+  adminCancelMeal,
+  adminGetEmployeeBookings,
   bookMeals, 
   cancelMeal, 
   getPaymentStatus, 
@@ -126,6 +129,29 @@ MealRouter.get(
     protect,
     authorize(Role.EMPLOYEE),
     getWalletStats
+  );
+
+  MealRouter.get(
+    '/admin/bookings/:userId',
+    protect,
+    authorize(Role.HRMANAGER, Role.CANTEEN, Role.ADMIN),
+    adminGetEmployeeBookings
+  );
+
+  // 2. Book on behalf of employee
+  MealRouter.post(
+    '/admin/book',
+    protect,
+    authorize(Role.HRMANAGER, Role.CANTEEN, Role.ADMIN),
+    adminBookMeal
+  );
+
+  // 3. Cancel on behalf of employee
+  MealRouter.post(
+    '/admin/cancel',
+    protect,
+    authorize(Role.HRMANAGER, Role.CANTEEN, Role.ADMIN),
+    adminCancelMeal
   );
 
   return MealRouter;

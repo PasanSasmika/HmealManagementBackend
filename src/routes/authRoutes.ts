@@ -13,7 +13,7 @@ router.post('/register', protect, authorize(Role.ADMIN, Role.HRMANAGER), registe
 
 router.post('/register-bulk',protect, authorize(Role.ADMIN, Role.HRMANAGER),upload.single('file'), registerBulk);
 
-router.get('/', protect, authorize(Role.ADMIN, Role.HRMANAGER), getAllUsers);
+router.get('/', protect, authorize(Role.ADMIN, Role.HRMANAGER, Role.CANTEEN), getAllUsers);
 router.put('/:id', protect, authorize(Role.ADMIN, Role.HRMANAGER), updateUser);
 router.delete('/:id', protect, authorize(Role.ADMIN, Role.HRMANAGER), deleteUser);
 export default router;

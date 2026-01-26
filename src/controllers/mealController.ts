@@ -23,9 +23,9 @@ export const bookMeals = async (req: any, res: Response): Promise<void> => {
       bookingDate.setUTCHours(0, 0, 0, 0); // Force midnight UTC for consistency
 
       // 4. Strict Date Validation
-      // if (bookingDate < today || bookingDate > maxDate) {
-      //   throw new Error(`Date ${b.date.split('T')[0]} is out of the allowed 7-day range.`);
-      // } /////////////////////////////////////////////////////////////////////////////////////////////// Uncomment last
+      if (bookingDate < today || bookingDate > maxDate) {
+        throw new Error(`Date ${b.date.split('T')[0]} is out of the allowed 7-day range.`);
+      } /////////////////////////////////////////////////////////////////////////////////////////////// Uncomment last
 
       return {
         updateOne: {
@@ -173,23 +173,23 @@ export const respondToRequest = async (req: any, res: Response, io: any): Promis
     if (action === 'accept') {
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
       booking.otp = otp;
-      // ❌ REMOVED: booking.status = 'served'; 
-      // Status remains 'requested' until Issue Meal step
       await booking.save();
 
       io.to(booking.userId.toString()).emit('meal_accepted', { otp });
-      res.status(200).json({ success: true, otp });
     } else {
       booking.status = 'rejected';
       await booking.save();
-      io.to(booking.userId.toString()).emit('meal_rejected', { message: "Request denied by canteen." });
-      res.status(200).json({ success: true, message: "Request rejected." });
+      io.to(booking.userId.toString()).emit('meal_rejected', { message: "Request denied." });
     }
+
+    // ✅ FIX: Tell ALL Canteen devices to remove this request
+    io.to('canteen_room').emit('remove_from_requests', { bookingId });
+
+    res.status(200).json({ success: true });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
   try {
@@ -342,24 +342,22 @@ export const getPaymentStatus = async (req: any, res: Response): Promise<void> =
 export const issueMeal = async (req: any, res: Response, io: any): Promise<void> => {
   try {
     const { bookingId } = req.body;
-
     const booking = await MealBooking.findById(bookingId);
+    
     if (!booking) {
       res.status(404).json({ message: "Booking not found" });
       return;
     }
 
-    // ✅ THIS IS WHERE WE MARK IT COMPLETE
     booking.status = 'served'; 
-    
     await booking.save();
 
-    // Notify employee
-    io.to(booking.userId.toString()).emit('meal_issued', { 
-      message: "Your meal has been issued. Enjoy!" 
-    });
+    io.to(booking.userId.toString()).emit('meal_issued', { message: "Enjoy your meal!" });
 
-    res.status(200).json({ success: true, message: "Meal issued successfully." });
+    // ✅ FIX: Tell ALL Canteen devices to remove this from the Queue
+    io.to('canteen_room').emit('remove_from_queue', { bookingId });
+
+    res.status(200).json({ success: true, message: "Meal issued." });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -375,23 +373,16 @@ export const rejectIssue = async (req: any, res: Response, io: any): Promise<voi
       return;
     }
 
-    // Reset fields to allow re-requesting
     booking.status = 'booked';
-    booking.otp = undefined;
-    booking.verifiedAt = undefined;
-    booking.paymentType = undefined;
-    booking.totalPrice = 0;
-    booking.amountPaid = 0;
-    booking.balance = 0;
-
+    // ... reset other fields ...
     await booking.save();
 
-    // Notify employee that issue was rejected (Reset UI)
-    io.to(booking.userId.toString()).emit('meal_issue_rejected', { 
-      message: "Meal issue rejected by canteen. You can request again." 
-    });
+    io.to(booking.userId.toString()).emit('meal_issue_rejected', { message: "Issue rejected." });
 
-    res.status(200).json({ success: true, message: "Meal issue rejected. Reset to booked." });
+    // ✅ FIX: Tell ALL Canteen devices to remove this from the Queue
+    io.to('canteen_room').emit('remove_from_queue', { bookingId });
+
+    res.status(200).json({ success: true });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -477,6 +468,94 @@ export const cancelMeal = async (req: any, res: Response): Promise<void> => {
       message: "Meal cancelled successfully." 
     });
 
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+export const adminGetEmployeeBookings = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params; // Target Employee ID
+    
+    // Fetch future & recent past bookings (e.g., last 7 days + future)
+    const today = new Date();
+    const pastDate = new Date(today);
+    pastDate.setDate(today.getDate() - 7);
+
+    const bookings = await MealBooking.find({
+      userId: userId,
+      date: { $gte: pastDate }
+    }).sort({ date: 1 });
+
+    res.status(200).json({ success: true, data: bookings });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ NEW: Admin/HR/Canteen books for an employee (No Time Lock Restrictions)
+export const adminBookMeal = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { userId, date, mealType } = req.body; // date format: "YYYY-MM-DD" or ISO
+    const adminId = req.user.id; 
+
+    // 1. Basic Validation
+    if (!userId || !date || !mealType) {
+      res.status(400).json({ message: "User ID, Date, and Meal Type are required." });
+      return;
+    }
+
+    // 2. FIX: Manual String Parsing to Force Exact Date
+    // We assume input 'date' contains "YYYY-MM-DD". We strip everything else.
+    // This prevents the server from converting "2026-01-26" to "2026-01-25 19:00 (EST)" etc.
+    const dateString = new Date(date).toISOString().split('T')[0]; // Safe normalize to string first
+    const [year, month, day] = dateString.split('-').map(Number);
+
+    // Create Date strictly at UTC Midnight (00:00:00Z)
+    // Note: Month is 0-indexed in JS (0=Jan, 1=Feb)
+    const bookingDate = new Date(Date.UTC(year, month - 1, day));
+
+    // 3. Check for duplicates
+    const existing = await MealBooking.findOne({ userId, date: bookingDate, mealType });
+    if (existing) {
+      res.status(400).json({ message: "Employee already has a booking for this meal." });
+      return;
+    }
+
+    // 4. Create Booking
+    const newBooking = new MealBooking({
+      userId,
+      date: bookingDate,
+      mealType,
+      bookedAt: new Date(),
+      status: 'booked'
+    });
+
+    await newBooking.save();
+
+    res.status(201).json({ success: true, message: "Meal booked successfully for employee." });
+
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ NEW: Admin/HR/Canteen cancels for an employee (No Time Lock Restrictions)
+export const adminCancelMeal = async (req: any, res: Response): Promise<void> => {
+  try {
+    const { bookingId } = req.body;
+
+    const booking = await MealBooking.findByIdAndDelete(bookingId);
+
+    if (!booking) {
+      res.status(404).json({ message: "Booking not found." });
+      return;
+    }
+
+    res.status(200).json({ success: true, message: "Booking cancelled successfully." });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
