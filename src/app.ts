@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './routes/authRoutes';
 import VisitorRouter from './routes/visitorRoutes';
+import AuditRouter from './routes/auditRoutes';
 
 const app: Application = express();
 
@@ -15,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/visitors', VisitorRouter);
-
+app.use('/api/audit', AuditRouter);
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', uptime: process.uptime() });
 });

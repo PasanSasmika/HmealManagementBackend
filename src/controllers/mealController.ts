@@ -3,6 +3,7 @@ import MealBooking, { MealType } from '../models/MealBooking';
 import { mealBookingSchema } from '../validations/mealValidation';
 import User from '@/models/User';
 import MealPrice from '@/models/MealPrice';
+import AuditLog from '@/models/AuditLog';
 
 export const bookMeals = async (req: any, res: Response): Promise<void> => {
   try {
@@ -546,16 +547,35 @@ export const adminBookMeal = async (req: any, res: Response): Promise<void> => {
 // ✅ NEW: Admin/HR/Canteen cancels for an employee (No Time Lock Restrictions)
 export const adminCancelMeal = async (req: any, res: Response): Promise<void> => {
   try {
-    const { bookingId } = req.body;
+    const { bookingId, reason } = req.body;
+    const adminId = req.user.id; // The Admin/Canteen user performing the action
 
-    const booking = await MealBooking.findByIdAndDelete(bookingId);
+    // 1. Find the booking first (Don't delete yet!)
+    const booking = await MealBooking.findById(bookingId);
 
     if (!booking) {
       res.status(404).json({ message: "Booking not found." });
       return;
     }
 
-    res.status(200).json({ success: true, message: "Booking cancelled successfully." });
+    // 2. ✅ SAVE TO AUDIT LOG (Permanent Record)
+    await AuditLog.create({
+      action: "MEAL_CANCELLED",
+      performedBy: adminId as any, 
+      targetUser: booking.userId as any, 
+      details: reason || "No reason provided", 
+      metadata: {
+        bookingDate: booking.date,
+        mealType: booking.mealType,
+        bookedAt: booking.bookedAt
+      }
+    });
+
+    // 3. Now delete the booking
+    await MealBooking.findByIdAndDelete(bookingId);
+
+    res.status(200).json({ success: true, message: "Booking cancelled and reason recorded." });
+
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
