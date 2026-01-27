@@ -18,7 +18,7 @@ import {
   verifyMealOTP
 } from '@/controllers/mealController';
 import { getMealPrices, updateMealPrices } from '@/controllers/mealPriceController';
-import { getWalletStats } from '@/controllers/walletController';
+import { getEmployeeWalletStats, getWalletStats, processLoanRepayment } from '@/controllers/walletController';
 
 /**
  * We export a function that accepts the Socket.io instance.
@@ -130,7 +130,19 @@ MealRouter.get(
     authorize(Role.EMPLOYEE),
     getWalletStats
   );
+  MealRouter.post(
+    '/wallet-repay', 
+    protect, 
+    authorize(Role.ADMIN, Role.HRMANAGER, Role.CANTEEN), 
+    (req, res) => processLoanRepayment(req, res, io) // Pass 'io' here
+  );
 
+  MealRouter.get(
+    '/wallet/admin/:userId',
+    protect,
+    authorize(Role.ADMIN, Role.HRMANAGER, Role.CANTEEN),
+    getEmployeeWalletStats
+  );
   MealRouter.get(
     '/admin/bookings/:userId',
     protect,

@@ -21,6 +21,9 @@ export interface IUser extends Document {
   mobileNumber: string;
   role: Role;
   subRole?: SubRole;
+
+  loanAmount: number; 
+  loanLimit: number;
 }
 
 const userSchema = new Schema<IUser>({
@@ -33,7 +36,9 @@ const userSchema = new Schema<IUser>({
     type: String, 
     enum: Object.values(SubRole),
     required: function(this: IUser) { return this.role === Role.EMPLOYEE; } 
-  }
+  },
+  loanAmount: { type: Number, default: 0 },
+  loanLimit: { type: Number, default: 0 }
 }, { timestamps: true });
 
 export default model<IUser>('User', userSchema);
