@@ -168,3 +168,66 @@ export const getDailyBookingReport = async (req: Request, res: Response): Promis
     res.status(500).json({ message: error.message });
   }
 };
+
+export const getWastageReport = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      res.status(400).json({ message: "Start and End dates are required." });
+      return;
+    }
+
+    // 1. Parse Dates
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+    
+    // 2. Determine "Yesterday" (The last fully completed day)
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0); // Start of today
+    
+    // We modify the 'end' date. 
+    // If the user selects 'Today' or a Future date, we cap the search at 'Yesterday'.
+    // This prevents "Dinner Today" from showing up as wastage before it happens.
+    let effectiveEnd = end;
+    if (effectiveEnd >= today) {
+        // If end date includes today, subtract one day to get yesterday
+        effectiveEnd = new Date(today);
+        effectiveEnd.setDate(effectiveEnd.getDate() - 1);
+    }
+
+    // Set Time Ranges (Start of StartDate to End of EffectiveEndDate)
+    const rangeStart = new Date(start.setUTCHours(0,0,0,0));
+    const rangeEnd = new Date(effectiveEnd.setUTCHours(23,59,59,999));
+
+    // If the adjusted range is invalid (e.g. Start Date was Today), return empty
+    if (rangeStart > rangeEnd) {
+         res.status(200).json({ success: true, count: 0, data: [] });
+         return;
+    }
+
+    const wastedBookings = await MealBooking.find({
+      date: { $gte: rangeStart, $lte: rangeEnd },
+      status: 'booked' // Status is still 'booked' (not served), and date is in the past
+    })
+    .populate('userId', 'firstName lastName mobileNumber subRole companyName')
+    .sort({ date: -1 });
+
+    // Transform for Frontend
+    const reportData = wastedBookings.map((b: any) => ({
+      id: b._id,
+      date: b.date,
+      name: b.userId ? `${b.userId.firstName} ${b.userId.lastName}` : "Unknown",
+      mobile: b.userId?.mobileNumber || "N/A",
+      type: b.userId?.subRole || "Internal",
+      company: b.userId?.companyName || "-",
+      meal: b.mealType,
+      status: 'NOT SERVED'
+    }));
+
+    res.status(200).json({ success: true, count: reportData.length, data: reportData });
+
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};

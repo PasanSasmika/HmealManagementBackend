@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { protect, authorize } from '../middleware/authMiddleware';
 import { Role } from '../models/User';
-import {  getDailyBookingReport, getDashboardStats, getEmployeeFinancialReport } from '../controllers/analyticsController';
+import {  getDailyBookingReport, getDashboardStats, getEmployeeFinancialReport, getWastageReport } from '../controllers/analyticsController';
 
 const AnalyticsRouter = Router();
 
@@ -26,4 +26,12 @@ AnalyticsRouter.get(
   authorize(Role.ADMIN, Role.HRMANAGER, Role.CANTEEN),
   getDailyBookingReport
 );
+
+AnalyticsRouter.get(
+  '/wastage-report', 
+  protect, authorize(Role.ADMIN, Role.HRMANAGER),
+   getWastageReport
+  );
+
+  
 export default AnalyticsRouter;
