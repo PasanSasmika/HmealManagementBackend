@@ -7,6 +7,7 @@ export const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 chars"),
   mobileNumber: z.string().regex(/^[0-9]{10}$/, "Invalid mobile number (10 digits)"),
   role: z.nativeEnum(Role),
+  companyName: z.string().optional(),
   subRole: z.nativeEnum(SubRole).optional()
 }).refine((data) => {
   if (data.role === Role.EMPLOYEE && !data.subRole) return false;

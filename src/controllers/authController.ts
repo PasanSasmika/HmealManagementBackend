@@ -85,7 +85,8 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
           username: row.username?.toString().trim(),
           mobileNumber: row.mobileNumber?.toString().trim(),
           role: row.role?.toString().toLowerCase().trim(),
-          subRole: row.subRole ? row.subRole.toString().toLowerCase().trim() : undefined
+          subRole: row.subRole ? row.subRole.toString().toLowerCase().trim() : undefined,
+          companyName: row.companyName ? row.companyName.toString().trim() : undefined
         };
 
         // Validate row

@@ -537,6 +537,14 @@ export const adminBookMeal = async (req: any, res: Response): Promise<void> => {
 
     await newBooking.save();
 
+    await AuditLog.create({
+      action: "ADMIN_BOOK_MEAL",
+      performedBy: adminId, // The Admin/HR who clicked the button
+      targetUser: userId,   // The Employee who got the meal
+      details: `Manual booking added for ${date} (${mealType})`,
+      metadata: { date, mealType }
+    });
+
     res.status(201).json({ success: true, message: "Meal booked successfully for employee." });
 
   } catch (error: any) {

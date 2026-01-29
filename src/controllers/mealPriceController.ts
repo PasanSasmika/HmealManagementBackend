@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import MealPrice from '../models/MealPrice';
+import AuditLog from '@/models/AuditLog';
 
 // GET: Fetch current prices
 export const getMealPrices = async (req: Request, res: Response) => {
@@ -20,37 +21,38 @@ export const getMealPrices = async (req: Request, res: Response) => {
   }
 };
 
-// POST: Update or Create prices (Admin/HR Only)
-export const updateMealPrices = async (req: any, res: Response) => {
+
+export const updateMealPrices = async (req: any, res: Response): Promise<void> => {
   try {
     const { breakfast, lunch, dinner } = req.body;
-    const userId = req.user.id;
+    const adminId = req.user.id;
 
-    // Find existing document or create new one
-    let prices = await MealPrice.findOne();
+    // 1. Get Old Prices first
+    let priceDoc = await MealPrice.findOne();
+    const oldPrices = priceDoc ? { ...priceDoc.toObject() } : { breakfast: 0, lunch: 0, dinner: 0 };
 
-    if (!prices) {
-      prices = new MealPrice({ 
-        breakfast, 
-        lunch, 
-        dinner, 
-        updatedBy: userId 
-      });
+    if (!priceDoc) {
+      priceDoc = new MealPrice({ breakfast, lunch, dinner });
     } else {
-      prices.breakfast = breakfast;
-      prices.lunch = lunch;
-      prices.dinner = dinner;
-      prices.updatedBy = userId;
+      priceDoc.breakfast = breakfast;
+      priceDoc.lunch = lunch;
+      priceDoc.dinner = dinner;
     }
+    await priceDoc.save();
 
-    await prices.save();
-
-    res.status(200).json({ 
-      success: true, 
-      message: "Meal prices updated successfully", 
-      data: prices 
+    // 2. ✅ LOG THE CHANGE
+    await AuditLog.create({
+      action: "UPDATE_PRICES",
+      performedBy: adminId,
+      details: `Updated meal prices.`,
+      metadata: {
+        old: { B: oldPrices.breakfast, L: oldPrices.lunch, D: oldPrices.dinner },
+        new: { B: breakfast, L: lunch, D: dinner }
+      }
     });
+
+    res.status(200).json({ success: true, message: "Prices updated and logged." });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
