@@ -22,5 +22,5 @@ const auditLogSchema = new Schema<IAuditLog>({
   details: { type: String, required: true },
   metadata: { type: Schema.Types.Mixed }, // Flexible field for any extra data
 }, { timestamps: true });
-
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 });
 export default model<IAuditLog>('AuditLog', auditLogSchema);
