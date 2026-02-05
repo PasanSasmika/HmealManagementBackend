@@ -588,3 +588,26 @@ export const adminCancelMeal = async (req: any, res: Response): Promise<void> =>
     res.status(500).json({ message: error.message });
   }
 };
+
+
+export const getMealHistory = async (req: any, res: Response): Promise<void> => {
+  try {
+    const userId = req.user.id;
+
+    // Fetch meals that are strictly 'served'
+    // Sort by Date descending (Newest first)
+    const history = await MealBooking.find({
+      userId,
+      status: 'served' 
+    })
+    .select('date mealType paymentType totalPrice amountPaid balance verifiedAt')
+    .sort({ date: -1 });
+
+    res.status(200).json({ 
+      success: true, 
+      data: history 
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
