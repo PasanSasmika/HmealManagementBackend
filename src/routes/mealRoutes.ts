@@ -7,6 +7,7 @@ import {
   adminGetEmployeeBookings,
   bookMeals, 
   cancelMeal, 
+  getMealHistory, 
   getPaymentStatus, 
   getTodayMeals, 
   getUpcomingBookings, 
@@ -166,6 +167,12 @@ MealRouter.get(
     adminCancelMeal
   );
 
+  MealRouter.get(
+    '/history',
+    protect,
+    authorize(Role.EMPLOYEE),
+    getMealHistory
+  )
   return MealRouter;
 
 

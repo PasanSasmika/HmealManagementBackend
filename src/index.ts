@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import app from './app';
 import MealRouter from './routes/mealRoutes';
 import dotenv from 'dotenv';
+// import { seedDefaultUsers } from './utils/seed';
 
 dotenv.config();
 
@@ -37,6 +38,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/my_app
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('✅ Connected to MongoDB');
+    //  seedDefaultUsers();
     server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
     });
