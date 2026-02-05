@@ -8,6 +8,9 @@ export const registerSchema = z.object({
   mobileNumber: z.string().regex(/^[0-9]{10}$/, "Invalid mobile number (10 digits)"),
   role: z.nativeEnum(Role),
   companyName: z.string().optional(),
+  employeeNo: z.string().optional(),
+  empId: z.string().optional(),
+  password: z.string().optional(),
   subRole: z.nativeEnum(SubRole).optional()
 }).refine((data) => {
   if (data.role === Role.EMPLOYEE && !data.subRole) return false;
@@ -19,5 +22,5 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   username: z.string(),
-  mobileNumber: z.string()
+  password: z.string().min(1, 'Password is required'),
 });
