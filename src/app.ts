@@ -5,7 +5,7 @@ import authRoutes from './routes/authRoutes';
 import VisitorRouter from './routes/visitorRoutes';
 import AuditRouter from './routes/auditRoutes';
 import AnalyticsRouter from './routes/analyticsRoutes';
-
+import bodyParser from 'body-parser'; // ✅ 1. Import body-parser
 const app: Application = express();
 
 // --- Global Middleware ---
@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
 
-
+app.use(bodyParser.text({ type: '*/*' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/visitors', VisitorRouter);
 app.use('/api/audit', AuditRouter);
