@@ -32,6 +32,7 @@ export interface IUser extends Document {
 
   loanAmount: number; 
   loanLimit: number;
+  bioId?: string;
   matchPassword: (enteredPassword: string) => Promise<boolean>;
 }
 
@@ -55,7 +56,8 @@ const userSchema = new Schema<IUser>({
   isFirstLogin: { type: Boolean, default: true },
 
   loanAmount: { type: Number, default: 0 },
-  loanLimit: { type: Number, default: 0 }
+  loanLimit: { type: Number, default: 0 },
+  bioId: { type: String, unique: true, sparse: true },
 }, { timestamps: true });
 
 
