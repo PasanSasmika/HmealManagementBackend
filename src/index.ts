@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import app from './app';
 import MealRouter from './routes/mealRoutes';
 import dotenv from 'dotenv';
+import zkRouter from './routes/zkRoutes';
 // import { seedDefaultUsers } from './utils/seed';
 
 dotenv.config();
@@ -16,7 +17,7 @@ const io = new Server(server, {
 
 // --- Inject io into MealRouter ---
 app.use('/api/meal', MealRouter(io));
-
+app.use('/iclock', zkRouter(io));
 // --- Socket.io Logic ---
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
