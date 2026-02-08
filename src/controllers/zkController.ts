@@ -63,7 +63,8 @@ export const handleAttendanceLog = async (req: Request, res: Response, io: any) 
               user: {
                 id: user._id,
                 name: `${user.firstName} ${user.lastName}`,
-                role: user.role
+                role: user.role,
+                subRole: user.subRole
               }
             });
 

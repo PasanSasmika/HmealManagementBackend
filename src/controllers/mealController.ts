@@ -176,7 +176,7 @@ export const respondToRequest = async (req: any, res: Response, io: any): Promis
       booking.otp = otp;
       await booking.save();
 
-      io.to(booking.userId.toString()).emit('meal_accepted', { otp });
+      io.to(booking.userId.toString()).emit('meal_accepted', { otp , bookingId: booking._id });
     } else {
       booking.status = 'rejected';
       await booking.save();
@@ -342,12 +342,25 @@ export const getPaymentStatus = async (req: any, res: Response): Promise<void> =
 
 export const issueMeal = async (req: any, res: Response, io: any): Promise<void> => {
   try {
-    const { bookingId } = req.body;
+    const { bookingId ,collectedAmount} = req.body;
     const booking = await MealBooking.findById(bookingId);
     
     if (!booking) {
       res.status(404).json({ message: "Booking not found" });
       return;
+    }
+
+    if (collectedAmount !== undefined && collectedAmount !== null) {
+        const amount = parseFloat(collectedAmount);
+        booking.amountPaid = amount;
+        
+        // If they paid full price, ensure balance is 0
+        if (amount >= (booking.totalPrice || 0)) {
+            booking.balance = 0;
+        } else {
+             // If partial, update balance
+            booking.balance = (booking.totalPrice || 0) - amount;
+        }
     }
 
     booking.status = 'served'; 
