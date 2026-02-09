@@ -6,6 +6,7 @@ import VisitorRouter from './routes/visitorRoutes';
 import AuditRouter from './routes/auditRoutes';
 import AnalyticsRouter from './routes/analyticsRoutes';
 import bodyParser from 'body-parser'; // ✅ 1. Import body-parser
+import Orgrouter from './routes/organizationRoutes';
 const app: Application = express();
 
 // --- Global Middleware ---
@@ -19,6 +20,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/visitors', VisitorRouter);
 app.use('/api/audit', AuditRouter);
 app.use('/api/analytics', AnalyticsRouter);
+app.use('/api/organization', Orgrouter);
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', uptime: process.uptime() });

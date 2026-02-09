@@ -7,33 +7,43 @@ import bcrypt from 'bcryptjs'; // ✅ Import bcrypt
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
+const generateEmpId = (company: string, division: string, empNo: string) => {
+    if (!company || !division || !empNo) return undefined;
+    const c = company.replace(/\s+/g, '').toLowerCase();
+    const d = division.replace(/\s+/g, '').toLowerCase();
+    const e = empNo.replace(/\s+/g, '');
+    return `${c}${d}${e}`; // e.g. toyoit1123
+};
+
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const validatedData = req.body; 
 
-    // ✅ FIX 1: Build the check query dynamically.
-    // We start by checking 'username'.
+    // ✅ AUTO-GENERATE ID (Backend Enforced)
+    const autoEmpId = generateEmpId(validatedData.companyName, validatedData.division, validatedData.employeeNo);
+
+    // Build unique check query
     const queryConditions: any[] = [{ username: validatedData.username }];
     
-    // Only check for 'empId' if it is provided and NOT an empty string.
-    if (validatedData.empId && validatedData.empId.trim() !== "") {
+    // Check if ID generated successfully
+    if (autoEmpId) {
+        queryConditions.push({ empId: autoEmpId });
+    } else if (validatedData.empId) {
+        // Fallback if manual ID sent (though UI is read-only)
         queryConditions.push({ empId: validatedData.empId });
     }
 
-    // Only check for 'mobileNumber' if provided (since it is unique in DB)
     if (validatedData.mobileNumber) {
         queryConditions.push({ mobileNumber: validatedData.mobileNumber });
     }
 
-    // Run the query with OR operator
     const existingUser = await User.findOne({ $or: queryConditions });
 
     if (existingUser) {
-      res.status(400).json({ message: 'User with this Username, Mobile, or EMP ID already exists' });
+      res.status(400).json({ message: 'User with this Username, Mobile, or generated EMP ID already exists' });
       return;
     }
 
-    // ✅ FIX 2: Password Logic (Admin PIN vs Default 1234)
     let finalPassword = '1234';
     let isFirstLogin = true;
 
@@ -42,33 +52,26 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         isFirstLogin = false; 
     }
 
-    // ✅ FIX 3: Sanitize Data for MongoDB
-    // We must convert empty strings ("") to undefined.
-    // If we save "", MongoDB treats it as a value and will block the 2nd user with "" due to unique constraints.
     const newUser = new User({
       ...validatedData,
       password: finalPassword, 
       isFirstLogin: isFirstLogin,
-      empId: validatedData.empId || undefined,
+      empId: autoEmpId || validatedData.empId || undefined, // Use Generated ID
       employeeNo: validatedData.employeeNo || undefined,
       subRole: validatedData.subRole || undefined,
       companyName: validatedData.companyName || undefined,
+      division: validatedData.division || undefined,
     });
 
     await newUser.save();
-
     res.status(201).json({ message: 'User registered successfully' });
 
   } catch (error: any) {
-    // ✅ FIX 4: Handle MongoDB Duplicate Key Error (Code 11000)
-    // This catches any unique constraint violations we might have missed above
     if (error.code === 11000) {
-        // Find which field caused the duplicate
         const field = Object.keys(error.keyPattern)[0]; 
         res.status(400).json({ message: `Duplicate Entry: ${field} already exists.` });
         return;
     }
-    
     res.status(400).json({ error: error.errors || error.message });
   }
 };
@@ -204,7 +207,6 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // ✅ FIX 1: Generate the Hash for '1234' manually BEFORE the loop
     const salt = await bcrypt.genSalt(10);
     const defaultHashedPassword = await bcrypt.hash('1234', salt);
 
@@ -215,39 +217,41 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
     const usersToInsert = [];
     const errors: any[] = [];
 
+    const cleanStr = (val: any) => val ? String(val).trim() : undefined;
+    const cleanLower = (val: any) => val ? String(val).trim().toLowerCase() : undefined;
+
     for (let i = 0; i < rawData.length; i++) {
       try {
         const row = rawData[i];
         
+        const companyName = cleanStr(row.companyName);
+        const division = cleanStr(row.division); 
+        const employeeNo = cleanStr(row.employeeNo);
+
+        // ✅ AUTO-GENERATE ID FOR BULK
+        const generatedEmpId = generateEmpId(companyName || '', division || '', employeeNo || '');
+
         const processedRow = {
           ...row,
-          username: row.username ? String(row.username).trim() : undefined,
-          mobileNumber: row.mobileNumber ? String(row.mobileNumber).trim() : undefined,
-          role: row.role ? String(row.role).toLowerCase().trim() : undefined,
-          subRole: row.subRole ? String(row.subRole).toLowerCase().trim() : undefined,
-          companyName: row.companyName ? String(row.companyName).trim() : undefined,
-          employeeNo: row.employeeNo ? String(row.employeeNo).trim() : undefined,
-          empId: row.empId ? String(row.empId).trim() : undefined,
-          
-          // ✅ FIX 2: Use the HASHED password, not '1234'
+          firstName: cleanStr(row.firstName),
+          lastName: cleanStr(row.lastName),
+          username: cleanStr(row.username),
+          mobileNumber: cleanStr(row.mobileNumber),
+          role: cleanLower(row.role),
+          subRole: cleanLower(row.subRole),
+          companyName: companyName,
+          division: division,
+          employeeNo: employeeNo,
+          empId: generatedEmpId, // Override Excel empId with Logic
           password: defaultHashedPassword, 
           isFirstLogin: true
         };
 
-        // Validate (We validate BEFORE hashing usually, but password isn't in Zod schema, so it's fine)
         const validated = registerSchema.parse(processedRow);
-        
-        // We need to manually add password back because Zod might strip unknown fields 
-        // if 'password' isn't in your registerSchema. 
-        // Ideally, ensure your registerSchema allows 'password'.
-        // If your schema strips it, we explicitly add it to the object pushed to DB:
-        usersToInsert.push({ ...validated, password: defaultHashedPassword });
+        usersToInsert.push({ ...validated, password: defaultHashedPassword, empId: generatedEmpId });
 
       } catch (err: any) {
-        errors.push({ 
-            row: i + 2, 
-            details: err.errors || err.message 
-        });
+        errors.push({ row: i + 2, details: err.errors || err.message });
       }
     }
 
@@ -256,7 +260,6 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // Handle Partial Insertions
     try {
         const result = await User.insertMany(usersToInsert, { ordered: false });
         res.status(201).json({ message: 'Users imported successfully', count: result.length });
@@ -264,12 +267,8 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
         if (dbError.name === 'MongoBulkWriteError' || dbError.code === 11000) {
             const insertedCount = dbError.insertedDocs ? dbError.insertedDocs.length : 0;
             const failedCount = dbError.writeErrors ? dbError.writeErrors.length : 0;
-
             if (insertedCount > 0) {
-                res.status(201).json({ 
-                    message: `Imported ${insertedCount} users. Skipped ${failedCount} duplicates.`, 
-                    count: insertedCount 
-                });
+                res.status(201).json({ message: `Imported ${insertedCount} users. Skipped ${failedCount} duplicates.`, count: insertedCount });
                 return;
             } else {
                 res.status(400).json({ message: "All users in this file already exist." });
@@ -278,11 +277,12 @@ export const registerBulk = async (req: Request, res: Response): Promise<void> =
         }
         throw dbError;
     }
-
   } catch (error: any) {
     res.status(500).json({ message: 'Server error during import', error: error.message });
   }
 };
+
+
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try { const users = await User.find().select('-password -__v').sort({ createdAt: -1 }); res.json({ success: true, data: users }); } 
   catch (error: any) { res.status(500).json({ message: error.message }); }
@@ -292,7 +292,13 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
   try {
     const { id } = req.params;
     const updateData = req.body;
-    delete updateData.password; // Do not update password here
+    
+    // Recalculate EMP ID if fields changed
+    if (updateData.companyName && updateData.division && updateData.employeeNo) {
+        updateData.empId = generateEmpId(updateData.companyName, updateData.division, updateData.employeeNo);
+    }
+
+    delete updateData.password; 
     delete updateData.username; 
     const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true, runValidators: true }).select('-password');
     if (!updatedUser) { res.status(404).json({ message: "User not found" }); return; }
