@@ -23,8 +23,7 @@ export interface IUser extends Document {
   role: Role;
   subRole?: SubRole;
   companyName?: string;
-  
-  
+  division?: string; 
   employeeNo?: string;
   empId?: string; 
   password?: string; 
@@ -48,10 +47,9 @@ const userSchema = new Schema<IUser>({
     required: function(this: IUser) { return this.role === Role.EMPLOYEE; } 
   },
   companyName: { type: String, default: '' },
-  
-  
+  division: { type: String, default: '' },
   employeeNo: { type: String, default: '' },
-  empId: { type: String, unique: true, sparse: true }, 
+  empId: { type: String, unique: true, sparse: true },
   password: { type: String, required: true }, 
   isFirstLogin: { type: Boolean, default: true },
 
