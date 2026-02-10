@@ -93,6 +93,30 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    if (user.isSuspended) {
+        const now = new Date();
+        const start = user.suspensionStart ? new Date(user.suspensionStart) : null;
+        const end = user.suspensionEnd ? new Date(user.suspensionEnd) : null;
+
+        // If current date is within range
+        if (start && end && now >= start && now <= end) {
+             res.status(403).json({ 
+                 message: `Account Suspended until ${end.toLocaleDateString()}. Contact HR. ඔබගේ  ගිණුම අක්‍රිය කර ඇත.` 
+             });
+             return;
+        } 
+        
+        // If suspension expired, auto-activate (Optional, or require manual removal)
+        // Here we auto-allow if date passed, but cleaner to keep flag false manually.
+        // For strict logic:
+        if (end && now > end) {
+            user.isSuspended = false;
+            user.suspensionStart = undefined;
+            user.suspensionEnd = undefined;
+            await user.save();
+        }
+    }
+
     // Check Password
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
@@ -315,4 +339,63 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     if (!deletedUser) { res.status(404).json({ message: "User not found" }); return; }
     res.json({ success: true, message: "User deleted successfully" });
   } catch (error: any) { res.status(500).json({ message: error.message }); }
+};
+
+
+export const suspendUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { userId, startDate, endDate } = req.body;
+        
+        if (!userId || !startDate || !endDate) {
+            res.status(400).json({ message: "User ID and Date Range required" });
+            return;
+        }
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        // Validate dates
+        if (start >= end) {
+            res.status(400).json({ message: "End date must be after start date" });
+            return;
+        }
+
+        const user = await User.findByIdAndUpdate(userId, {
+            isSuspended: true,
+            suspensionStart: start,
+            suspensionEnd: end
+        }, { new: true });
+
+        if (!user) {
+            res.status(404).json({ message: "User not found" });
+            return;
+        }
+
+        res.json({ success: true, message: `User suspended from ${startDate} to ${endDate}` });
+
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// ✅ NEW: Remove Suspension
+export const unsuspendUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { userId } = req.body;
+        
+        const user = await User.findByIdAndUpdate(userId, {
+            isSuspended: false,
+            $unset: { suspensionStart: "", suspensionEnd: "" } // Remove fields
+        }, { new: true });
+
+        if (!user) {
+            res.status(404).json({ message: "User not found" });
+            return;
+        }
+
+        res.json({ success: true, message: "User suspension removed." });
+
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
 };
