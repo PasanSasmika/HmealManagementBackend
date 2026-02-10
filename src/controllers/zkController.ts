@@ -32,19 +32,47 @@ export const handleAttendanceLog = async (req: Request, res: Response, io: any) 
         const zkUserId = parts[0]; 
 
         if (zkUserId) {
-          console.log(`✅ Processing User ID: ${zkUserId}`);
+          console.log(`🔍 Checking User Bio ID: ${zkUserId}`);
           const user = await User.findOne({ bioId: zkUserId });
 
           if (user) {
+            const deviceSN = req.query.SN || "default_device";
+
+            // ⛔ CRITICAL: SUSPENSION CHECK
+            if (user.isSuspended) {
+                const now = new Date();
+                const start = user.suspensionStart ? new Date(user.suspensionStart) : null;
+                const end = user.suspensionEnd ? new Date(user.suspensionEnd) : null;
+
+                // Case A: User is currently suspended
+                if (start && end && now >= start && now <= end) {
+                    console.log(`⛔ BLOCKED: Suspended User ${user.username} tried to login via Fingerprint.`);
+                    
+                    // Emit Error to Kiosk Screen
+                    io.to(`room_${deviceSN}`).emit('kiosk_error', {
+                        message: `ACCOUNT SUSPENDED UNTIL ${end.toLocaleDateString()}`
+                    });
+                    
+                    continue; // Skip token generation
+                }
+
+                // Case B: Suspension Expired (Auto-Reactivate)
+                if (end && now > end) {
+                    console.log(`✅ Suspension Expired for ${user.username}. Reactivating account.`);
+                    user.isSuspended = false;
+                    user.suspensionStart = undefined;
+                    user.suspensionEnd = undefined;
+                    await user.save();
+                }
+            }
+
+            // ✅ LOGIN SUCCESS
             const token = jwt.sign(
               { id: user._id, role: user.role },
               JWT_SECRET as string,
               { expiresIn: '1d' }
             );
-
-            const deviceSN = req.query.SN || "default_device";
             
-            // ✅ CRITICAL FIX: Sending 'subRole' so Web Interface shows "Pay Later" button
             io.to(`room_${deviceSN}`).emit('kiosk_login', {
               success: true,
               token: token,
@@ -52,7 +80,7 @@ export const handleAttendanceLog = async (req: Request, res: Response, io: any) 
                 id: user._id,
                 name: `${user.firstName} ${user.lastName}`,
                 role: user.role,
-                subRole: user.subRole // <--- THIS WAS MISSING
+                subRole: user.subRole 
               }
             });
 

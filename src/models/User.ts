@@ -29,6 +29,10 @@ export interface IUser extends Document {
   password?: string; 
   isFirstLogin: boolean;
 
+  isSuspended: boolean;
+  suspensionStart?: Date;
+  suspensionEnd?: Date;
+
   loanAmount: number; 
   loanLimit: number;
   bioId?: string;
@@ -56,6 +60,11 @@ const userSchema = new Schema<IUser>({
   loanAmount: { type: Number, default: 0 },
   loanLimit: { type: Number, default: 0 },
   bioId: { type: String, unique: true, sparse: true },
+
+  isSuspended: { type: Boolean, default: false },
+  suspensionStart: { type: Date },
+  suspensionEnd: { type: Date }
+  
 }, { timestamps: true });
 
 
