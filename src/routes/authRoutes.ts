@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, registerBulk, getAllUsers, updateUser, deleteUser, setPin, resetPassword } from '../controllers/authController';
+import { register, login, registerBulk, getAllUsers, updateUser, deleteUser, setPin, resetPassword, suspendUser, unsuspendUser } from '../controllers/authController';
 import { authorize, protect } from '@/middleware/authMiddleware';
 import { Role } from '@/models/User';
 import multer from 'multer';
@@ -17,4 +17,7 @@ router.post('/register-bulk',protect, authorize(Role.ADMIN, Role.HRMANAGER),uplo
 router.get('/', protect, authorize(Role.ADMIN, Role.HRMANAGER, Role.CANTEEN), getAllUsers);
 router.put('/:id', protect, authorize(Role.ADMIN, Role.HRMANAGER), updateUser);
 router.delete('/:id', protect, authorize(Role.ADMIN, Role.HRMANAGER), deleteUser);
+
+router.post('/suspend', protect, authorize(Role.ADMIN, Role.HRMANAGER), suspendUser);
+router.post('/unsuspend', protect, authorize(Role.ADMIN, Role.HRMANAGER), unsuspendUser);
 export default router;
