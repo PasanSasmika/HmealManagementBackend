@@ -120,7 +120,7 @@ export const requestMeal = async (req: any, res: Response, io: any): Promise<voi
 
     // 2. Time Window Validation
     const windows: any = {
-      breakfast: { start: 8, end: 11 },
+      breakfast: { start: 7, end: 11 },
       lunch: { start: 12, end: 16 },
       dinner: { start: 18, end: 22 }
     };
@@ -235,17 +235,11 @@ export const verifyMealOTP = async (req: any, res: Response): Promise<void> => {
 export const processPayment = async (req: any, res: Response, io: any): Promise<void> => {
   try {
     const { bookingId, paymentType, amountPaid } = req.body;
-
     const booking = await MealBooking.findById(bookingId).populate('userId');
-    if (!booking) {
-      res.status(404).json({ message: "Booking not found" });
-      return;
-    }
+    if (!booking) { res.status(404).json({ message: "Booking not found" }); return; }
 
-    // 1. FETCH DYNAMIC PRICES
     const priceDoc = await MealPrice.findOne();
     let currentMealPrice = 0;
-
     if (priceDoc) {
       if (booking.mealType === 'breakfast') currentMealPrice = priceDoc.breakfast;
       else if (booking.mealType === 'lunch') currentMealPrice = priceDoc.lunch;
@@ -256,7 +250,6 @@ export const processPayment = async (req: any, res: Response, io: any): Promise<
     let finalAmountPaid = 0;
     let balance = 0;
 
-    // 2. Business Logic
     if (user.subRole === 'intern') {
       booking.paymentType = 'free';
       booking.totalPrice = 0;
@@ -269,22 +262,21 @@ export const processPayment = async (req: any, res: Response, io: any): Promise<
     else if (user.subRole === 'casual' || user.subRole === 'manpower') {
       booking.paymentType = paymentType;
       booking.totalPrice = currentMealPrice; 
-      
       if (paymentType === 'pay_later') {
         finalAmountPaid = amountPaid || 0;
         balance = currentMealPrice - finalAmountPaid;
       } else {
-        finalAmountPaid = currentMealPrice;
+        // If coming from Web Kiosk "Pay Now", this might be 0. 
+        // We trust the Canteen to enter the real physical cash in `issueMeal` later.
+        finalAmountPaid = amountPaid !== undefined ? amountPaid : currentMealPrice; 
       }
     }
 
     booking.amountPaid = finalAmountPaid;
     booking.balance = balance;
-    // ❌ REMOVED: booking.status = 'served'; (Wait for Canteen Issue)
-    
     await booking.save();
 
-    // 3. Notify Canteen
+    // ✅ Notify Canteen with Loan Amount
     io.to('canteen_room').emit('payment_confirmed', {
       bookingId: booking._id,
       employeeName: `${user.firstName} ${user.lastName}`,
@@ -292,19 +284,15 @@ export const processPayment = async (req: any, res: Response, io: any): Promise<
       paymentType: booking.paymentType,
       totalPrice: booking.totalPrice,
       amountPaid: booking.amountPaid,
-      balance: booking.balance
+      balance: booking.balance,
+      loanAmount: user.loanAmount // <--- ADDED: Canteen needs this for Pay Now excess logic
     });
 
     res.status(200).json({ 
       success: true, 
       message: "Payment processed. Waiting for canteen to issue meal.",
-      details: {
-        total: booking.totalPrice,
-        paid: booking.amountPaid,
-        balance: booking.balance
-      }
+      details: { total: booking.totalPrice, paid: booking.amountPaid, balance: booking.balance }
     });
-
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -339,40 +327,112 @@ export const getPaymentStatus = async (req: any, res: Response): Promise<void> =
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 export const issueMeal = async (req: any, res: Response, io: any): Promise<void> => {
   try {
-    const { bookingId ,collectedAmount} = req.body;
-    const booking = await MealBooking.findById(bookingId);
+    const { bookingId, collectedAmount, settleLoan } = req.body; 
     
-    if (!booking) {
-      res.status(404).json({ message: "Booking not found" });
-      return;
+    const booking = await MealBooking.findById(bookingId);
+    if (!booking) { 
+        res.status(404).json({ message: "Booking not found" }); 
+        return; 
     }
+
+    const shouldSettle = settleLoan === true || String(settleLoan) === 'true';
 
     if (collectedAmount !== undefined && collectedAmount !== null) {
         const amount = parseFloat(collectedAmount);
+        const totalPrice = booking.totalPrice || 0;
+        
         booking.amountPaid = amount;
         
-        // If they paid full price, ensure balance is 0
-        if (amount >= (booking.totalPrice || 0)) {
-            booking.balance = 0;
+        // --- EXCESS & LOAN LOGIC ---
+        if (amount >= totalPrice) {
+            booking.balance = 0; // Current meal is fully paid
+            
+            // Calculate Excess Cash
+            let excess = amount - totalPrice;
+
+            if (excess > 0 && shouldSettle) {
+                // ✅ 1. Find all OLD unpaid bookings (Waterfall)
+                const unpaidBookings = await MealBooking.find({
+                    userId: booking.userId,
+                    balance: { $gt: 0 },
+                    _id: { $ne: booking._id } // Exclude current booking
+                }).sort({ date: 1 }); // Oldest first
+
+                let totalDeducted = 0;
+
+                // ✅ 2. Loop and Pay Off Old Debts
+                for (const pastBooking of unpaidBookings) {
+                    if (excess <= 0) break;
+
+                    const debt = pastBooking.balance || 0;
+                    let payment = 0;
+
+                    if (excess >= debt) {
+                        // Pay off fully
+                        payment = debt;
+                        pastBooking.balance = 0;
+                        pastBooking.amountPaid = (pastBooking.amountPaid || 0) + payment;
+                    } else {
+                        // Pay off partially
+                        payment = excess;
+                        pastBooking.balance = debt - excess;
+                        pastBooking.amountPaid = (pastBooking.amountPaid || 0) + payment;
+                    }
+
+                    excess -= payment;
+                    totalDeducted += payment;
+                    await pastBooking.save();
+                }
+
+                // ✅ 3. Update User & Audit Log
+                if (totalDeducted > 0) {
+                    const user = await User.findById(booking.userId);
+                    if (user) {
+                        const oldLoan = user.loanAmount;
+                        user.loanAmount -= totalDeducted;
+                        if(user.loanAmount < 0) user.loanAmount = 0; // Safety check
+                        await user.save();
+
+                        await AuditLog.create({
+                            action: "LOAN_REPAYMENT",
+                            performedBy: req.user?.id || booking.userId,
+                            targetUser: booking.userId,
+                            details: `Meal Excess Repayment. Paid: ${amount}, Meal: ${totalPrice}, Total Deducted: ${totalDeducted}`,
+                            metadata: { previousLoan: oldLoan, newLoan: user.loanAmount }
+                        });
+                    }
+                }
+            }
+
         } else {
-             // If partial, update balance
-            booking.balance = (booking.totalPrice || 0) - amount;
+            // Partial payment for THIS meal (User paid less than price)
+            booking.balance = totalPrice - amount;
+            
+            // If they created NEW debt, update User loan immediately
+            // (Optional, but keeps sync faster)
+            await User.findByIdAndUpdate(booking.userId, { 
+                $inc: { loanAmount: booking.balance } 
+            });
         }
     }
 
+    // 4. Mark Served
     booking.status = 'served'; 
     await booking.save();
 
+    // 5. Notifications
     io.to(booking.userId.toString()).emit('meal_issued', { message: "Enjoy your meal!" });
-
-    // ✅ FIX: Tell ALL Canteen devices to remove this from the Queue
     io.to('canteen_room').emit('remove_from_queue', { bookingId });
 
+    // Force Wallet Refresh on Mobile
+    io.to(booking.userId.toString()).emit('wallet_updated');
+
     res.status(200).json({ success: true, message: "Meal issued." });
+
   } catch (error: any) {
+    console.error("Issue Meal Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
