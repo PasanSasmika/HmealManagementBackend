@@ -120,8 +120,8 @@ export const requestMeal = async (req: any, res: Response, io: any): Promise<voi
 
     // 2. Time Window Validation
     const windows: any = {
-      breakfast: { start: 7, end: 11 },
-      lunch: { start: 12, end: 16 },
+      breakfast: { start: 8, end: 11 },
+      lunch: { start: 11, end: 16 },
       dinner: { start: 18, end: 22 }
     };
 
